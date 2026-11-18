@@ -1,9 +1,11 @@
 """make.fun entry — "Sum up 17 November's world news in one image".
 
-The image is entry.png beside this file: a hand-set front page of the day's
-news (Kerch Bridge strike, Iran's strike on a US radar in Bahrain, Trump's
-Asia trip, the US losing measles-free status, Nvidia's board refusing its
-ex-CEO), drawn by tools/render_entry.py and committed as the bytes to submit.
+The image is entry.png beside this file: a front page of the day's news laid out
+as a newspaper (25 stories: the Kerch Bridge strike, Iran and the US trading
+blows around the Gulf, Trump's Quad summit in Manila, the US losing its
+measles-free status, Nvidia's results, the COP31 draft, and briefs from six
+continents), drawn by tools/render_entry.py and committed as the bytes to
+submit.
 
 The program runs twice and must write the same bytes both times, so it only
 copies the committed image to /output/entry.png. Outside the grader's

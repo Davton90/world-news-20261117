@@ -1,63 +1,58 @@
-"""Render entry.png: one image summing up the world news of Tuesday 17 November 2026.
+"""Render entry.png: a one-page newspaper of Tuesday 17 November 2026.
 
-Hand-set editorial layout, drawn with Pillow at 2x and downsampled for clean edges.
+Flat editorial layout drawn with Pillow at 2x and downsampled for clean edges.
 Run: python tools/render_entry.py
 """
 
 from __future__ import annotations
 
-import math
 import os
+import random
 
 from PIL import Image, ImageDraw, ImageFont
 
 W = H = 1024
 S = 2  # supersample factor
 
-BG = (7, 11, 18)
-CARD = (14, 22, 34)
-CARD2 = (16, 25, 38)
-BORDER = (30, 42, 58)
-WHITE = (245, 247, 250)
-MUTED = (152, 167, 187)
-DIM = (110, 128, 150)
-ACCENT = (255, 106, 69)
-STEEL = (104, 128, 160)
-LIGHT = (222, 230, 241)
+PAPER = (246, 243, 235)
+INK = (21, 22, 25)
+BODY = (58, 60, 64)
+RED = (170, 40, 32)
+MUTED = (124, 119, 110)
+RULE = (198, 191, 177)
+STEEL = (120, 143, 163)
+SEA = (218, 225, 229)
+SMOKE = (146, 144, 138)
+SAND = (226, 220, 206)
 
 FONT_DIR = r"C:\Windows\Fonts"
-BLACK = os.path.join(FONT_DIR, "seguibl.ttf")
-BOLD = os.path.join(FONT_DIR, "segoeuib.ttf")
-SEMI = os.path.join(FONT_DIR, "seguisb.ttf")
-REG = os.path.join(FONT_DIR, "segoeui.ttf")
+SERIF_B = os.path.join(FONT_DIR, "georgiab.ttf")
+SERIF = os.path.join(FONT_DIR, "georgia.ttf")
+SERIF_I = os.path.join(FONT_DIR, "georgiai.ttf")
+SANS_B = os.path.join(FONT_DIR, "segoeuib.ttf")
+SANS_SB = os.path.join(FONT_DIR, "seguisb.ttf")
+SANS = os.path.join(FONT_DIR, "segoeui.ttf")
 
 
 def font(path: str, size: float) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(path, max(6, int(round(size * S))))
 
 
-F_DATE = font(BLACK, 72)
-F_MAST = font(BOLD, 18)
-F_SUB = font(REG, 16)
-F_TICK = font(SEMI, 17)
-F_FOOT = font(REG, 14)
+def sp(text: str) -> str:
+    """Letterspaced caps for kickers."""
+    return "\u2009".join(text)
 
 
-def sp(text: str, tracking: int = 2) -> str:
-    return ("".join(ch + " " * tracking for ch in text)).rstrip()
-
-
-def text_w(d: ImageDraw.ImageDraw, text: str, f: ImageFont.FreeTypeFont) -> float:
+def tw(d: ImageDraw.ImageDraw, text: str, f: ImageFont.FreeTypeFont) -> float:
     box = d.textbbox((0, 0), text, font=f)
-    return box[2] - box[0]
+    return (box[2] - box[0]) / S
 
 
 def wrap(d, text: str, f, max_w: float):
     words, lines, cur = text.split(), [], ""
-    limit = max_w * S
     for w in words:
         trial = (cur + " " + w).strip()
-        if text_w(d, trial, f) <= limit or not cur:
+        if tw(d, trial, f) <= max_w or not cur:
             cur = trial
         else:
             lines.append(cur)
@@ -67,300 +62,358 @@ def wrap(d, text: str, f, max_w: float):
     return lines
 
 
-def fit(d, text: str, path: str, size: float, max_w: float):
-    """Return a font at the largest size <= size that fits max_w (1x units)."""
-    f = font(path, size)
-    while text_w(d, text, f) > max_w * S and f.size > 8 * S:
-        f = ImageFont.truetype(path, f.size - 1)
-    return f
+def draw_wrapped(d, text, f, x, y, max_w, leading, color=INK, max_lines=None):
+    lines = wrap(d, text, f, max_w)
+    if max_lines:
+        lines = lines[:max_lines]
+    for ln in lines:
+        d.text((x * S, y * S), ln, font=f, fill=color)
+        y += leading
+    return y
 
 
-def card(d, box, radius=16, fill=CARD, outline=BORDER, width=2):
-    x0, y0, x1, y1 = [v * S for v in box]
-    d.rounded_rectangle([x0, y0, x1, y1], radius=radius * S, fill=fill,
-                        outline=outline, width=int(width * S))
+def text(d, x, y, s, f, color=INK):
+    d.text((x * S, y * S), s, font=f, fill=color)
 
 
-def line(d, pts, color, width=3):
+def hline(d, x0, x1, y, color=RULE, width=1.0):
+    d.line([(x0 * S, y * S), (x1 * S, y * S)], fill=color, width=max(1, int(width * S)))
+
+
+def vline(d, x, y0, y1, color=RULE, width=1.0):
+    d.line([(x * S, y0 * S), (x * S, y1 * S)], fill=color, width=max(1, int(width * S)))
+
+
+def rect(d, box, fill=None, outline=None, width=1.0):
+    d.rectangle([v * S for v in box], fill=fill, outline=outline,
+                width=max(1, int(width * S)))
+
+
+def poly(d, pts, fill=None, outline=None):
+    d.polygon([(x * S, y * S) for x, y in pts], fill=fill, outline=outline)
+
+
+def line(d, pts, color=INK, width=1.0):
     d.line([(x * S, y * S) for x, y in pts], fill=color, width=max(1, int(width * S)))
 
 
-def ellipse(d, box, fill=None, outline=None, width=2):
-    d.ellipse([v * S for v in box], fill=fill, outline=outline,
-              width=max(1, int(width * S)))
+def dot(d, cx, cy, r, fill=RED):
+    d.ellipse([(cx - r) * S, (cy - r) * S, (cx + r) * S, (cy + r) * S], fill=fill)
 
 
-def arc(d, box, start, end, color, width=3):
-    d.arc([v * S for v in box], start, end, fill=color, width=max(1, int(width * S)))
+# --------------------------------------------------------------------------- type
+
+F_KICK = font(SANS_B, 8.6)
+F_RAILK = font(SANS_B, 8.4)
+F_LEAD = font(SERIF_B, 35)
+F_RAIL = font(SERIF_B, 21)
+F_TILE = font(SERIF_B, 18.5)
+F_BRIEF = font(SANS_SB, 11.2)
+F_DEK = font(SANS, 11)
+F_DEK_S = font(SANS, 10)
+F_STAT = font(SANS_B, 27)
+F_STAT_BIG = font(SANS_B, 30)
+F_STATLBL = font(SANS, 7.8)
+F_FOOT = font(SANS, 8.6)
+F_DECK = font(SERIF_I, 12.4)
+
+M = 28
+CW = W - 2 * M
 
 
-def poly(d, pts, fill=None, outline=None, width=2):
-    d.polygon([(x * S, y * S) for x, y in pts], fill=fill, outline=outline,
-              width=max(1, int(width * S)))
+# ---------------------------------------------------------------- lead picture
 
+def bridge(d, canvas, x, y, w, h):
+    """Duotone drawing of the Kerch Bridge: two decks, one span broken into the strait."""
+    SKY = (26, 36, 47)
+    DEEP = (14, 24, 33)
+    LIGHT = (232, 230, 220)
+    CABLE = (140, 163, 184)
+    INK2 = (232, 230, 220)
+    water = y + h * 0.70
+    rect(d, (x, y, x + w, y + h), SKY)
+    rect(d, (x, water, x + w, y + h), DEEP)
 
-# --------------------------------------------------------------------------- icons
+    # distant shores
+    poly(d, [(x, water), (x + w * 0.18, water - 8), (x + w * 0.31, water),
+             (x + w * 0.31, water)], fill=(45, 59, 73))
+    poly(d, [(x + w * 0.74, water), (x + w * 0.88, water - 10), (x + w, water - 4),
+             (x + w, water)], fill=(45, 59, 73))
 
+    deck_y = y + h * 0.52
+    for sx, ex, pylon in ((x + 1, x + w * 0.395, x + w * 0.27),
+                          (x + w * 0.605, x + w - 1, x + w * 0.73)):
+        # deck slab: a filled bar reads better than a single line
+        rect(d, (sx, deck_y, ex, deck_y + 4.5), fill=LIGHT)
+        px, ptop = pylon, deck_y - 52
+        line(d, [(px, ptop), (px, water)], LIGHT, 3.4)
+        line(d, [(px - 6, ptop), (px + 6, ptop)], LIGHT, 2.6)
+        for i in range(8):
+            t = i / 7
+            line(d, [(px, ptop + 4), (px + (ex - px) * (0.16 + 0.84 * t), deck_y - 1)],
+                 CABLE, 1.15)
+            line(d, [(px, ptop + 4), (px - (px - sx) * (0.16 + 0.84 * t), deck_y - 1)],
+                 CABLE, 1.05)
+        for q in (0.16, 0.5, 0.84):
+            qx = sx + (ex - sx) * q
+            line(d, [(qx, deck_y + 5), (qx, water + 5)], LIGHT, 2.6)
 
-def icon_target(d, x, y, s=46):
-    """A crosshair with a drone above it: strikes on US radar in Bahrain."""
-    cx, cy = x + s * 0.44, y + s * 0.58
-    r = s * 0.30
-    ellipse(d, [cx - r, cy - r, cx + r, cy + r], outline=ACCENT, width=3)
-    ellipse(d, [cx - r * 0.34, cy - r * 0.34, cx + r * 0.34, cy + r * 0.34], fill=ACCENT)
-    for a, b in (((cx - r * 1.55, cy), (cx - r * 1.12, cy)),
-                 ((cx + r * 1.12, cy), (cx + r * 1.55, cy)),
-                 ((cx, cy - r * 1.55), (cx, cy - r * 1.12)),
-                 ((cx, cy + r * 1.12), (cx, cy + r * 1.55))):
-        line(d, [a, b], LIGHT, 3)
-    # drone above, small and clean
-    dx, dy = cx, y + s * 0.16
-    line(d, [(dx - s * 0.16, dy), (dx + s * 0.16, dy)], LIGHT, 2)
-    for ox in (-0.16, 0.16):
-        ellipse(d, [dx + s * ox - s * 0.045, dy - s * 0.045,
-                    dx + s * ox + s * 0.045, dy + s * 0.045], fill=LIGHT)
-    ellipse(d, [dx - s * 0.04, dy - s * 0.04, dx + s * 0.04, dy + s * 0.04], fill=ACCENT)
+    gap_l, gap_r = x + w * 0.375, x + w * 0.625
 
+    # broken ends: torn slabs, the right one sagging toward the water
+    poly(d, [(gap_l - 4, deck_y), (gap_l + 13, deck_y + 2), (gap_l + 9, deck_y + 10),
+             (gap_l - 4, deck_y + 5)], fill=INK2)
+    poly(d, [(gap_r + 4, deck_y), (gap_r - 13, deck_y + 2), (gap_r - 9, deck_y + 10),
+             (gap_r + 4, deck_y + 5)], fill=INK2)
 
-def icon_globe(d, x, y, s=46):
-    """Globe with a route between two pins: the Manila and China summits."""
-    cx, cy, r = x + s * 0.48, y + s * 0.52, s * 0.36
-    ellipse(d, [cx - r, cy - r, cx + r, cy + r], outline=STEEL, width=3)
-    ellipse(d, [cx - r * 0.45, cy - r, cx + r * 0.45, cy + r], outline=STEEL, width=2)
-    line(d, [(cx - r, cy), (cx + r, cy)], STEEL, 2)
-    # route over the top
-    arc(d, [cx - r * 0.9, cy - r * 1.35, cx + r * 0.9, cy + r * 0.3], 200, 330, ACCENT, 3)
-    for px, py in ((cx - r * 0.62, cy - r * 0.74), (cx + r * 0.60, cy - r * 0.80)):
-        ellipse(d, [px - s * 0.045, py - s * 0.045, px + s * 0.045, py + s * 0.045],
-                fill=ACCENT)
-
-
-def icon_virus(d, x, y, s=46):
-    """A virus particle beside a cracked shield: the lost measles-free status."""
-    cx, cy, r = x + s * 0.42, y + s * 0.50, s * 0.22
-    for i in range(12):
-        a = math.radians(i * 30 + 8)
-        x0, y0 = cx + math.cos(a) * r, cy + math.sin(a) * r
-        x1, y1 = cx + math.cos(a) * (r + s * 0.12), cy + math.sin(a) * (r + s * 0.12)
-        line(d, [(x0, y0), (x1, y1)], ACCENT, 2)
-        ellipse(d, [x1 - s * 0.033, y1 - s * 0.033, x1 + s * 0.033, y1 + s * 0.033],
-                fill=ACCENT)
-    ellipse(d, [cx - r, cy - r, cx + r, cy + r], fill=(36, 22, 26), outline=ACCENT, width=3)
-    ellipse(d, [cx - r * 0.40, cy - r * 0.40, cx + r * 0.40, cy + r * 0.40], fill=ACCENT)
-    sx, sy = x + s * 0.80, y + s * 0.50
-    poly(d, [(sx, sy - s * 0.26), (sx + s * 0.17, sy - s * 0.17), (sx + s * 0.13, sy + s * 0.12),
-             (sx, sy + s * 0.26), (sx - s * 0.13, sy + s * 0.12), (sx - s * 0.17, sy - s * 0.17)],
-         outline=STEEL, width=3)
-    line(d, [(sx - s * 0.01, sy - s * 0.12), (sx + s * 0.06, sy - s * 0.01),
-             (sx - s * 0.04, sy + s * 0.08)], ACCENT, 2)
-
-
-def icon_chip(d, x, y, s=46):
-    """A processor and a refused return arrow: Nvidia's board and its ex-CEO."""
-    cx, cy, r = x + s * 0.46, y + s * 0.54, s * 0.24
-    d.rounded_rectangle([(cx - r) * S, (cy - r) * S, (cx + r) * S, (cy + r) * S],
-                        radius=5 * S, outline=LIGHT, width=3 * S)
-    d.rounded_rectangle([(cx - r * 0.44) * S, (cy - r * 0.44) * S,
-                         (cx + r * 0.44) * S, (cy + r * 0.44) * S],
-                        radius=3 * S, fill=ACCENT)
-    for i in (-0.55, 0.0, 0.55):
-        off = r * i
-        line(d, [(cx + off, cy - r), (cx + off, cy - r - s * 0.09)], STEEL, 3)
-        line(d, [(cx + off, cy + r), (cx + off, cy + r + s * 0.09)], STEEL, 3)
-        line(d, [(cx - r, cy + off), (cx - r - s * 0.09, cy + off)], STEEL, 3)
-        line(d, [(cx + r, cy + off), (cx + r + s * 0.09, cy + off)], STEEL, 3)
-    ax, ay = x + s * 0.84, y + s * 0.30
-    arc(d, [ax - s * 0.13, ay - s * 0.13, ax + s * 0.13, ay + s * 0.13], 60, 300, LIGHT, 2)
-    poly(d, [(ax - s * 0.14, ay - s * 0.18), (ax - s * 0.02, ay - s * 0.11),
-             (ax - s * 0.13, ay - s * 0.02)], fill=LIGHT)
-    line(d, [(ax - s * 0.13, ay + s * 0.13), (ax + s * 0.13, ay - s * 0.13)], ACCENT, 3)
-
-
-def bridge_scene(d, x0, y0, x1, y1):
-    """A long bridge over water with one span blown out and smoke rising from it."""
-    w, h = x1 - x0, y1 - y0
-    water = y0 + h * 0.78
-    deck = y0 + h * 0.55
-
-    # water: horizon, ripples, reflections
-    line(d, [(x0, water), (x1, water)], (34, 50, 70), 2)
-    for i, yy in enumerate((water + 12, water + 28, water + 44)):
-        line(d, [(x0 + 12 + i * 18, yy), (x1 - 18 - i * 14, yy)], (26, 40, 58), 3)
-
-    gap_l, gap_r = x0 + w * 0.44, x0 + w * 0.60
-
-    # deck runs, piers, cables
-    for a, b in ((x0 + 2, gap_l), (gap_r, x1 - 2)):
-        line(d, [(a, deck), (b, deck)], LIGHT, 6)
-        line(d, [(a, deck + 9), (b, deck + 9)], STEEL, 3)
-        span = b - a
-        n = max(2, int(span / 92))
-        for i in range(n + 1):
-            px = a + span * i / n
-            line(d, [(px, deck + 9), (px, water + 10)], STEEL, 3)
-    for tx in (x0 + w * 0.17, x0 + w * 0.83):
-        line(d, [(tx, deck), (tx, y0 + h * 0.06)], LIGHT, 6)
-        line(d, [(tx, y0 + h * 0.16), (tx - w * 0.045, y0 + h * 0.16)], LIGHT, 5)
-        for k in range(6):
-            f = k / 5
-            yy = y0 + h * 0.07 + (deck - y0 - h * 0.07) * f
-            line(d, [(tx + 3, yy), (tx + w * 0.105 * (1 - f) + 4, deck)], STEEL, 2)
-
-    # the broken span: ragged stubs angled into the gap, debris below
-    for sx, ang in ((gap_l, 1), (gap_r, -1)):
-        line(d, [(sx, deck), (sx + ang * 14, deck + 14)], LIGHT, 6)
-        line(d, [(sx + ang * 14, deck + 14), (sx + ang * 10, deck + 27)], LIGHT, 5)
-        line(d, [(sx + ang * 10, deck + 27), (sx + ang * 21, deck + 34)], LIGHT, 4)
-    for sx, sy in ((gap_l + 18, deck + 40), (gap_r - 24, deck + 48),
-                   (x0 + w * 0.52, water + 4), (gap_l + 6, water + 16)):
-        line(d, [(sx, sy), (sx + 13, sy + 8)], STEEL, 4)
-
-    # blast: a burst of rays with a hot core, just above the deck
-    bx, by = (gap_l + gap_r) / 2, deck - 2
-    for i in range(10):
-        a = math.radians(i * 36 + 12)
-        r0, r1 = 20, (46 if i % 2 else 34)
-        line(d, [(bx + math.cos(a) * r0, by + math.sin(a) * r0 * 0.8),
-                 (bx + math.cos(a) * r1, by + math.sin(a) * r1 * 0.8)], ACCENT, 5)
-    for r, col in ((26, (120, 36, 18)), (17, ACCENT), (9, (255, 190, 120)), (4, (255, 240, 210))):
-        ellipse(d, [bx - r, by - r * 0.85, bx + r, by + r * 0.85], fill=col)
+    # the fallen span, half sunk
+    poly(d, [(x + w * 0.437, water + 2), (x + w * 0.545, water - 20),
+             (x + w * 0.585, water - 13), (x + w * 0.503, water + 6),
+             (x + w * 0.458, water + 6)],
+         fill=(206, 204, 194), outline=LIGHT)
+    line(d, [(x + w * 0.452, water + 3), (x + w * 0.552, water - 16)], (150, 150, 142), 0.8)
+    line(d, [(x + w * 0.470, water + 4), (x + w * 0.570, water - 14)], (150, 150, 142), 0.8)
     for i in range(3):
-        line(d, [(bx - 22 + i * 4, water + 14 + i * 12), (bx + 22 - i * 4, water + 14 + i * 12)],
-             (120, 58, 34), 3)
+        line(d, [(x + w * (0.385 + i * 0.018), water + 4),
+                 (x + w * (0.415 + i * 0.018), water + 4)], CABLE, 0.9)
 
-    # smoke: a rising column, thinning as it climbs
-    for ox, oy, rr, col in ((0, -20, 13, (40, 48, 60)), (7, -34, 11, (50, 59, 73)),
-                            (-5, -47, 10, (50, 59, 73)), (3, -59, 8, (40, 48, 60)),
-                            (-1, -70, 6, (50, 59, 73))):
-        ellipse(d, [bx + ox - rr, deck + oy - rr, bx + ox + rr, deck + oy + rr], fill=col)
+    # dark smoke rising from the gap: a narrow base that spreads as it climbs
+    plume = Image.new("RGBA", (w * S, h * S), (0, 0, 0, 0))
+    pd = ImageDraw.Draw(plume)
+    rng = random.Random(5)
+    cx = (gap_l + gap_r) / 2 - x
+    for i in range(11):
+        rx = cx + rng.uniform(-6, 8) + i * 3.4
+        ry = h * 0.47 - i * 8.6
+        rr = 5.5 + i * 2.0
+        alpha = max(14, 110 - i * 9)
+        col = (196, 194, 186) if i < 5 else (160, 160, 154)
+        pd.ellipse([(rx - rr) * S, (ry - rr) * S, (rx + rr) * S, (ry + rr) * S],
+                   fill=col + (alpha,))
+    canvas.paste(plume, (int(x * S), int(y * S)), plume)
+
+    # fire at the break
+    fx, fy = gap_l + 4, deck_y - 1
+    poly(d, [(fx - 4, fy), (fx, fy - 11), (fx + 2, fy - 5), (fx + 5, fy - 12),
+             (fx + 6, fy)], fill=(214, 92, 46))
+    poly(d, [(fx - 2, fy - 1), (fx, fy - 7), (fx + 3, fy - 1)], fill=(232, 166, 80))
+    # rubble in the water below the gap
+    for dx, dy, s_ in ((0.46, 2, 3.4), (0.51, 6, 2.4), (0.56, 1, 2.0)):
+        poly(d, [(x + w * dx, water + dy), (x + w * dx + s_, water + dy - 2.5),
+                 (x + w * dx + s_ * 1.6, water + dy + 1.4)],
+             fill=(120, 118, 112))
+
+    # drones above
+    for (dx, dy) in ((x + w * 0.10, y + h * 0.16), (x + w * 0.185, y + h * 0.30),
+                     (x + w * 0.64, y + h * 0.13)):
+        line(d, [(dx - 8, dy), (dx + 8, dy)], LIGHT, 2.0)
+        for o in (-8, -2.6, 2.6, 8):
+            line(d, [(dx + o, dy - 2.2), (dx + o, dy + 2.2)], LIGHT, 1.0)
+        line(d, [(dx - 3.5, dy - 11), (dx - 7.5, dy - 17)], LIGHT, 0.9)
+        line(d, [(dx + 3.5, dy - 11), (dx + 7.5, dy - 17)], LIGHT, 0.9)
+    for i in range(8):
+        t = i / 8
+        dot(d, x + w * 0.03 + w * 0.26 * t, y + h * 0.06 + h * 0.22 * t, 1.1,
+            (120, 140, 158))
+
+    text(d, x + 10, water + 9, sp("KERCH STRAIT"), F_STATLBL, (168, 184, 198))
+    cap = "Crimea"
+    text(d, x + w - 12 - tw(d, cap, F_STATLBL), water + 9, cap, F_STATLBL, (168, 184, 198))
 
 
-# --------------------------------------------------------------------------- layout
+# ------------------------------------------------------------------- stories
+
+def kicker(d, x, y, s, color=RED, f=F_KICK):
+    text(d, x, y, sp(s), f, color)
+    return y + 13
 
 
-def build() -> Image.Image:
-    img = Image.new("RGB", (W * S, H * S), BG)
+def rail_story(d, x, y, w, kick, head, dek):
+    y = kicker(d, x, y, kick)
+    y = draw_wrapped(d, head, F_RAIL, x, y, w, 22.5, INK, 3)
+    draw_wrapped(d, dek, F_DEK_S, x, y + 3, w, 13.4, BODY, 4)
+
+
+def stat_tile(d, x, y, w, stat, statlbl, kick, head, dek, graphic=None, gw=0):
+    text(d, x, y - 4, stat, F_STAT, RED)
+    text(d, x, y + 23, sp(statlbl), F_STATLBL, MUTED)
+    body_w = w - (gw + 12 if graphic else 0)
+    ty = y + 42
+    ty = kicker(d, x, ty, kick)
+    ty = draw_wrapped(d, head, F_TILE, x, ty - 1, body_w, 20.5, INK, 2)
+    draw_wrapped(d, dek, F_DEK_S, x, ty + 2, body_w, 13, BODY, 2)
+    if graphic:
+        graphic(d, x + w - gw, y - 2, gw, 76)
+
+
+def nvidia_chart(d, x, y, w, h):
+    base = y + h - 12
+    slot = w / 2
+    for i, (val, fill, lbl) in enumerate(((57.0, STEEL, "57"), (115.8, INK, "115.8"))):
+        bh = (h - 26) * (val / 115.8)
+        bw = slot * 0.46
+        bx = x + i * slot + (slot - bw) / 2
+        rect(d, (bx, base - bh, bx + bw, base), fill=fill)
+        text(d, bx + bw / 2 - tw(d, lbl, F_STATLBL) / 2, base - bh - 9, lbl,
+             F_STATLBL, INK)
+    hline(d, x, x + w, base, INK, 1.0)
+    text(d, x, base + 3, sp("FY26"), F_STATLBL, MUTED)
+    text(d, x + slot, base + 3, sp("FY27"), F_STATLBL, MUTED)
+
+
+def measles_stamp(d, x, y, w, h):
+    rect(d, (x + 2, y + 12, x + w, y + 42), outline=RED, width=1.8)
+    label = sp("REVOKED")
+    lb = font(SANS_B, 10)
+    text(d, x + 2 + (w - 2 - tw(d, label, lb)) / 2, y + 21, label, lb, RED)
+    big = font(SERIF_B, 40)
+    text(d, x + w / 2 - tw(d, "3", big) / 2, y + 48, "3", big, RED)
+    text(d, x + w / 2 - tw(d, sp("COUNTRIES"), F_STATLBL) / 2, y + 92,
+         sp("COUNTRIES"), F_STATLBL, MUTED)
+
+
+# ------------------------------------------------------------------------ page
+
+def page(path: str) -> None:
+    img = Image.new("RGB", (W * S, H * S), PAPER)
     d = ImageDraw.Draw(img)
 
-    for gx in range(0, W, 64):
-        line(d, [(gx, 0), (gx, H)], (13, 19, 29), 1)
-    for gy in range(0, H, 64):
-        line(d, [(0, gy), (W, gy)], (13, 19, 29), 1)
+    # ---- masthead
+    rect(d, (0, 0, W, 6), fill=RED)
+    text(d, M, 23, sp("THE WORLD IN ONE PICTURE"), F_KICK, RED)
+    right = sp("25 STORIES  ·  SIX CONTINENTS  ·  REPORTED THAT DAY")
+    text(d, W - M - tw(d, right, F_KICK), 23, right, F_KICK, MUTED)
+    hline(d, M, W - M, 38, INK, 1.4)
 
-    m = 40
-    right = W - m
+    name = "Tuesday 17 November 2026"
+    f = font(SERIF_B, 60)
+    while tw(d, name, f) > CW - 6:
+        f = ImageFont.truetype(SERIF_B, f.size - 2)
+    text(d, M, 47, name, f, INK)
 
-    # masthead
-    d.text((m * S, 32 * S), sp("THE WORLD", 4), font=F_MAST, fill=MUTED)
-    d.text((right * S - text_w(d, sp("TUESDAY", 4), F_MAST), 32 * S),
-           sp("TUESDAY", 4), font=F_MAST, fill=MUTED)
-    d.text((m * S, 58 * S), "17 NOVEMBER 2026", font=F_DATE, fill=WHITE)
-    d.text((right * S - text_w(d, "the day's news in one image", F_SUB), 120 * S),
-           "the day's news in one image", font=F_SUB, fill=DIM)
-    line(d, [(m, 148), (m + 132, 148)], ACCENT, 4)
-    line(d, [(m + 144, 148), (right, 148)], BORDER, 2)
+    text(d, M, 116,
+         "War in the Gulf and on the Kerch Bridge, a measles setback in the Americas,",
+         F_DECK, BODY)
+    text(d, M, 131,
+         "Nvidia's doubled sales, and a climate draft that speeds the exit from fossil fuels.",
+         F_DECK, BODY)
+    hline(d, M, W - M, 152, INK, 2.0)
 
-    # hero
-    hx0, hy0, hx1, hy1 = m, 170, 600, 600
-    card(d, (hx0, hy0, hx1, hy1), radius=18)
-    d.text(((hx0 + 24) * S, (hy0 + 20) * S), sp("EUROPE  ·  WAR", 3), font=F_TICK, fill=ACCENT)
-    yy = hy0 + 56
-    for ln in ("KERCH BRIDGE", "SPAN DESTROYED"):
-        d.text(((hx0 + 24) * S, yy * S), ln, font=font(BLACK, 54), fill=WHITE)
-        yy += 60
-    yy += 4
-    body = ("Ukraine hits Russia's only Crimea link a second night running; Moscow's "
-            "missiles damage two Kyiv bridges and kill at least two.")
-    for ln in wrap(d, body, F_SUB, hx1 - hx0 - 48):
-        d.text(((hx0 + 24) * S, yy * S), ln, font=F_SUB, fill=MUTED)
-        yy += 22
-    bridge_scene(d, hx0 + 24, hy0 + 258, hx1 - 24, hy1 - 16)
+    # ---- lead
+    lx, lw = M, 604
+    bridge(d, img, lx, 162, lw, 142)
+    text(d, lx, 308, "A span of the road bridge, damaged on Monday, fell into the strait on Tuesday.",
+         font(SERIF_I, 8.6), MUTED)
+    y = kicker(d, lx, 326, "EUROPE  ·  UKRAINE WAR")
+    y = draw_wrapped(d, "Kerch Bridge hit again as a road span falls",
+                     F_LEAD, lx, y, lw, 37.5, INK, 2)
+    draw_wrapped(d, "Ukrainian drones struck the bridge to Crimea for a second day, killing two "
+                    "people; Russia closed the crossing. Russian missiles damaged two bridges in Kyiv.",
+                 F_DEK, lx, y + 7, lw, 15, BODY, 3)
 
-    # right column
-    r_tiles = [
-        dict(kick="MIDDLE EAST", head=("IRAN HITS U.S.", "RADAR IN BAHRAIN"),
-             sub="Third drone attack in days; Bahrain says air defenses intercepted it.",
-             icon=icon_target),
-        dict(kick="ASIA  ·  DIPLOMACY", head=("TRUMP IN MANILA,", "THEN CHINA"),
-             sub="ASEAN and Quad summits; a first Xi–Putin–Trump meeting is next.",
-             icon=icon_globe),
+    vline(d, 656, 160, 452, RULE, 1.2)
+
+    # ---- rail
+    rx, rw = 680, W - M - 680
+    rail_story(d, rx, 160, rw, "MIDDLE EAST  ·  IRAN WAR",
+               "Bahrain downs drones aimed at a US base",
+               "Iran's Guards say they hit a US radar at Sheikh Isa; American jets struck Qeshm "
+               "Island at least six times.")
+    hline(d, rx, W - M, 300, RULE, 1.0)
+    rail_story(d, rx, 314, rw, "ASIA  ·  DIPLOMACY",
+               "Trump brings the Quad back to Manila",
+               "The US, India, Japan and Australia agreed critical-minerals deals at ASEAN; Trump "
+               "meets Xi in Shenzhen next.")
+    hline(d, M, W - M, 462, INK, 1.6)
+
+    # ---- number-led tiles: three columns, two rows
+    cols = 3
+    gap = 26
+    cw = (CW - gap * (cols - 1)) / cols
+    rows = [
+        ("$115.8bn", "QUARTERLY SALES", "BUSINESS  ·  MARKETS",
+         "Nvidia doubles sales, and keeps its old boss out",
+         "First results since Jensen Huang resigned; the board says it will not reinstate him.",
+         nvidia_chart),
+        ("5,700", "US MEASLES CASES", "AMERICAS  ·  HEALTH",
+         "America loses its measles-free status",
+         "PAHO also revoked Mexico's and Bolivia's; US cases passed 5,700 this year.",
+         measles_stamp),
+        ("37", "FACTORIES SHUT", "ASIA  ·  LABOUR",
+         "Bangladesh police tear-gas garment workers",
+         "Workers seeking ৳30,000 a month, up from ৳12,500, shut plants across Dhaka.",
+         None),
+        ("19", "KILLED", "EUROPE  ·  DISASTER",
+         "Russian military plane crashes in Siberia",
+         "An An-12 came down near Kemerovo with 19 aboard; a fault is suspected.",
+         None),
+        ("224", "SENTENCED", "AFRICA  ·  JUSTICE",
+         "Guinea jails 224 in a gold-mining crackdown",
+         "A Conakry court tried more than 1,000 people over illegal mining in Siguiri.",
+         None),
+        ("$120bn", "ADAPTATION GOAL", "GLOBAL  ·  CLIMATE",
+         "COP31 draft urges a faster exit from fossil fuels",
+         "The text calls for an immediate transition and tripled adaptation finance by 2035.",
+         None),
     ]
-    rx0, rx1 = 620, right
-    ty = hy0
-    for t in r_tiles:
-        card(d, (rx0, ty, rx1, ty + 206))
-        t["icon"](d, rx0 + 20, ty + 18, 44)
-        d.text(((rx0 + 78) * S, (ty + 24) * S), sp(t["kick"], 1), font=font(BOLD, 14), fill=ACCENT)
-        yy = ty + 50
-        hf = font(BLACK, 27)
-        for ln in t["head"]:
-            d.text(((rx0 + 78) * S, yy * S), ln, font=hf, fill=WHITE)
-            yy += 31
-        yy += 4
-        for ln in wrap(d, t["sub"], font(REG, 15), rx1 - rx0 - 98):
-            d.text(((rx0 + 78) * S, yy * S), ln, font=font(REG, 15), fill=MUTED)
-            yy += 19
-        ty += 218
+    for i, (stat, lbl, kick, head, dek, graphic) in enumerate(rows):
+        r, c = divmod(i, cols)
+        x = M + c * (cw + gap)
+        y = 476 + r * 126
+        stat_tile(d, x, y, cw, stat, lbl, kick, head, dek,
+                  graphic=graphic, gw=78 if graphic else 0)
+        if c:
+            vline(d, x - gap / 2, y - 2, y + 116, RULE, 0.9)
+    hline(d, M, W - M, 726, INK, 1.6)
+    also = sp("ALSO ON THE DAY")
+    text(d, M, 731, also, F_KICK, RED)
+    hline(d, M + tw(d, also, F_KICK) + 12, W - M, 738, RULE, 0.9)
 
-    # bottom row
-    bottom = [
-        dict(kick="NORTH AMERICA  ·  HEALTH", head=("U.S. LOSES", "MEASLES-FREE", "STATUS"),
-             sub="PAHO ends 26 years of elimination as outbreaks spread.",
-             icon=icon_virus),
-        dict(kick="TECHNOLOGY  ·  MARKETS", head=("NVIDIA SHUNS", "HUANG'S RETURN"),
-             sub="Board rules out its ex-CEO as quarterly revenue beats forecasts.",
-             icon=icon_chip),
+    # ---- briefs: four columns, three rows
+    briefs = [
+        ("EUROPE", "Prague train collision injures 46"),
+        ("EUROPE", "UK sanctions eight settler builders and Tzav 9"),
+        ("EUROPE", "Five held in North Macedonia over Iran-linked plot"),
+        ("EUROPE", "Serbia's student movement takes its seats"),
+        ("ASIA", "Mongolia's president resigns over graft claims"),
+        ("ASIA", "Xi meets Chile's Kast on APEC's sidelines"),
+        ("ASIA", "France and Malaysia sign a rare-earths partnership"),
+        ("ASIA", "Awami League mobs burn a police station in Tungipara"),
+        ("AMERICAS", "Peltola takes Alaska's Senate seat from Sullivan"),
+        ("AMERICAS", "Haitians march for Salvadoran anti-gang troops"),
+        ("AMERICAS", "Canada and China agree further tariff cuts"),
+        ("MARKETS", "Dow falls 849 points as software stocks slide"),
+        ("MIDDLE EAST", "Israeli strikes kill five in Gaza despite the ceasefire"),
+        ("MIDDLE EAST", "Settlers kill a 72-year-old woman near Jericho"),
+        ("OCEANIA", "Magnitude 6.6 quake shakes Indonesia's Tual"),
+        ("SPORT", "Haaland's 96th-minute penalty seals Norway 3-2"),
     ]
-    bw = (right - m - 2 * 16) // 3
-    by0, by1 = 616, 912
-    for i, t in enumerate(bottom):
-        bx = m + i * (bw + 16)
-        card(d, (bx, by0, bx + bw, by1))
-        t["icon"](d, bx + 20, by0 + 20, 48)
-        ff = fit(d, sp(t["kick"], 1), BOLD, 13, bw - 96)
-        d.text(((bx + 80) * S, (by0 + 38) * S), sp(t["kick"], 1), font=ff, fill=ACCENT)
-        yy = by0 + 84
-        hf = font(BLACK, 29)
-        for ln in t["head"]:
-            d.text(((bx + 20) * S, yy * S), ln, font=hf, fill=WHITE)
-            yy += 33
-        yy += 8
-        for ln in wrap(d, t["sub"], font(REG, 15), bw - 40):
-            # last line keeps clear of the card edge
-            d.text(((bx + 20) * S, yy * S), ln, font=font(REG, 15), fill=MUTED)
-            yy += 19
+    bw = (CW - gap * 3) / 4
+    for i, (kick, head) in enumerate(briefs):
+        c, r = i % 4, i // 4
+        x = M + c * (bw + gap)
+        yy = 748 + r * 44
+        text(d, x, yy, sp(kick), F_STATLBL, RED)
+        draw_wrapped(d, head, F_BRIEF, x, yy + 10, bw, 12.6, INK, 2)
+        if c:
+            vline(d, x - gap / 2, yy - 1, yy + 34, RULE, 0.8)
+    hline(d, M, W - M, 926, RULE, 1.0)
 
-    # elsewhere
-    bx = m + 2 * (bw + 16)
-    card(d, (bx, by0, bx + bw, by1), fill=CARD2)
-    d.text(((bx + 20) * S, (by0 + 24) * S), sp("ELSEWHERE", 1), font=font(BOLD, 14), fill=ACCENT)
-    notes = [
-        ("LATIN AMERICA", "Chile's president, José Antonio Kast, meets Xi Jinping in Shenzhen."),
-        ("AFRICA", "Nigeria's inflation eases to 14.1% as food prices slow."),
-        ("PACIFIC", "Magnitude 6.6 quake off Indonesia's Tual, in the Banda Sea."),
-    ]
-    yy = by0 + 56
-    for place, txt in notes:
-        d.text(((bx + 20) * S, yy * S), place, font=font(SEMI, 12), fill=LIGHT)
-        yy += 18
-        for ln in wrap(d, txt, font(REG, 14), bw - 40):
-            d.text(((bx + 20) * S, yy * S), ln, font=font(REG, 14), fill=MUTED)
-            yy += 17
-        yy += 14
+    # ---- footer
+    text(d, M, 934, "Every story happened, or was first reported, on Tuesday 17 November 2026.",
+         F_FOOT, BODY)
+    right = sp("SOURCES: AP · REUTERS · AFP · BBC · AL JAZEERA · XINHUA · WIKIPEDIA")
+    text(d, W - M - tw(d, right, F_FOOT), 934, right, F_FOOT, MUTED)
 
-    line(d, [(m, 934), (right, 934)], BORDER, 2)
-    d.text((m * S, 950 * S),
-           "World news of Tuesday 17 November 2026  ·  events as reported that day",
-           font=F_FOOT, fill=DIM)
+    fields = sp("CONFLICT · DIPLOMACY · POLITICS · MARKETS · HEALTH · CLIMATE · DISASTER · JUSTICE · SPORT")
+    text(d, M, 956, fields, F_STATLBL, INK)
 
-    return img.resize((W, H), Image.LANCZOS)
-
-
-def main() -> None:
-    out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "entry.png")
-    build().save(out, "PNG", optimize=True)
-    print(out, os.path.getsize(out), "bytes")
+    img = img.resize((W, H), Image.LANCZOS)
+    img.save(path, optimize=True)
 
 
 if __name__ == "__main__":
-    main()
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out = os.path.join(here, "entry.png")
+    page(out)
+    print(out, os.path.getsize(out))

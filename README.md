@@ -6,25 +6,32 @@
 
 An entry for make.fun's daily bounty ["Sum up 17 November's world news in one
 image"](https://make.fun/bounty/news-image-20261117): a single 1024×1024 image
-that reads as a front page of Tuesday 17 November 2026, plus the small program
-that writes it to `/output/entry.png`.
+laid out as the front page of Tuesday 17 November 2026 — 25 stories from six
+continents — plus the small program that writes it to `/output/entry.png`.
 
-The stories shown are the day's as reported by the world's news services:
+The page carries the day's reported news:
 
-- **Europe:** Ukraine strikes the Kerch Bridge — Russia's only road link to
-  occupied Crimea — for a second night, collapsing a span; Russian missiles hit
-  two bridges in Kyiv and kill at least two people.
-- **Middle East:** Iran's third drone attack in days on US targets in Bahrain,
-  aimed at a radar system at Sheikh Isa Air Base; Bahrain says it intercepted it.
-- **Asia:** President Trump arrives in Manila for the ASEAN and Quad summits,
-  with a first Xi–Putin–Trump meeting to follow in China.
-- **North America / health:** the United States loses its measles elimination
-  status after 26 years, the Pan American Health Organization announces.
-- **Technology / markets:** Nvidia's board rules out reinstating Jensen Huang as
-  chief executive as the company reports quarterly revenue above forecasts.
-- **Elsewhere:** Chile's president, José Antonio Kast, meets Xi Jinping in
-  Shenzhen; Nigeria's inflation eases to 14.1%; a magnitude 6.6 earthquake
-  strikes off Indonesia's Tual.
+- **Lead, Europe:** Ukrainian drones strike the Kerch Bridge for a second day,
+  collapsing a road span into the strait and killing two people; Russian missiles
+  damage two bridges in Kyiv.
+- **Middle East:** Bahrain intercepts Iranian drones aimed at a US radar at
+  Sheikh Isa Air Base, and US aircraft strike Qeshm Island at least six times.
+- **Asia:** Trump holds the first Quad summit in two years in Manila, with
+  critical-minerals deals, before meeting Xi Jinping in Shenzhen.
+- **Americas / health:** the US loses its measles elimination status; PAHO also
+  revokes Mexico's and Bolivia's, with more than 5,700 US cases this year.
+- **Business:** Nvidia reports $115.8bn of quarterly sales, up 103%, in its first
+  results since Jensen Huang resigned; the board will not reinstate him, and the
+  Dow falls 849 points.
+- **Climate:** the COP31 draft calls for an immediate transition away from fossil
+  fuels and tripled adaptation finance, at least $120bn, by 2035.
+- **Also on the day:** a Russian An-12 crash in Siberia kills 19; Bangladesh
+  police tear-gas garment workers; Guinea jails 224 over illegal gold mining; a
+  Prague train collision injures 46; Mongolia's president resigns; Serbia's
+  student movement takes its seats; Alaska elects Mary Peltola to the Senate;
+  Israel strikes Gaza and settlers kill a woman near Jericho; Chile's Kast meets
+  Xi; Canada and China cut tariffs; France and Malaysia sign a rare-earths pact;
+  a magnitude 6.6 quake shakes Tual, Indonesia; Norway beat Denmark 3-2.
 
 ## Run it
 
